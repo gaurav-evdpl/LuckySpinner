@@ -56,29 +56,20 @@ public struct LuckySpinnerView: View {
     }
 
     public var body: some View {
-        ZStack {
-            VStack(spacing: 20) {
-                Text(title)
-                    .font(.title2.bold())
-                    .multilineTextAlignment(.center)
+        VStack(spacing: 20) {
+            Text(title)
+                .font(.title2.bold())
+                .multilineTextAlignment(.center)
 
-                if names.isEmpty {
-                    emptyState
-                } else {
-                    wheelSection
-                    resultSection
-                    spinButton
-                }
-            }
-            .padding()
-
-            // A single confetti burst that covers the entire view.
-            // Rendered last so it's on top of everything (wheel, pointer, name, button).
-            if config.showsConfetti && showConfetti {
-                ConfettiView(isActive: true, colors: config.colors)
-                    .allowsHitTesting(false)
+            if names.isEmpty {
+                emptyState
+            } else {
+                wheelSection
+                resultSection
+                spinButton
             }
         }
+        .padding()
     }
 
     // MARK: Sections
@@ -124,21 +115,30 @@ public struct LuckySpinnerView: View {
             .offset(y: -4)
     }
 
-    /// Shows the selected name (or a hint before the first spin).
+    /// Shows the selected name with a confetti burst behind it.
     private var resultSection: some View {
-        VStack(spacing: 4) {
-            if let selectedName {
-                Text(config.selectedText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(selectedName)
-                    .font(.title.bold())
-                    .foregroundColor(.primary)
-                    .transition(.scale.combined(with: .opacity))
-            } else {
-                Text("Tap \(buttonTitle) to start")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+        ZStack {
+            // Confetti bursts outward from behind the selected name.
+            if config.showsConfetti && showConfetti {
+                ConfettiView(isActive: true, colors: config.colors, count: 100)
+                    .frame(width: 500, height: 500)
+                    .allowsHitTesting(false)
+            }
+
+            VStack(spacing: 4) {
+                if let selectedName {
+                    Text(config.selectedText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(selectedName)
+                        .font(.title.bold())
+                        .foregroundColor(.primary)
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    Text("Tap \(buttonTitle) to start")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .frame(minHeight: 60)

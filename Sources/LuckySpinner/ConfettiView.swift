@@ -33,7 +33,7 @@ struct ConfettiView: View {
     var colors: [Color] = LuckySpinnerTheme.classic
 
     /// Number of pieces in the burst.
-    var count: Int = 40
+    var count: Int = 100
 
     /// How long the burst animation runs (seconds).
     var duration: Double = 1.6
