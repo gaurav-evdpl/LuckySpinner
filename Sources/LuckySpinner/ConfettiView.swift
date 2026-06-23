@@ -81,7 +81,7 @@ struct ConfettiView: View {
                     )
                     .opacity(animate ? 0 : 1)
                     .animation(
-                        .easeOut(duration: 1.2).delay(piece.delay),
+                        animate ? .easeOut(duration: 1.4).delay(piece.delay) : nil,
                         value: animate
                     )
                 }
@@ -95,13 +95,30 @@ struct ConfettiView: View {
     /// Plays the burst from the start whenever it becomes active.
     private func restartIfNeeded() {
         guard isActive else {
-            animate = false
+            // Snap pieces back to the center, with no animation, ready for next time.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                animate = false
+            }
             return
         }
-        // Reset to the start, then animate outward on the next runloop tick.
-        animate = false
+
+        // 1. Snap to the start instantly (no animation) so every burst begins fresh.
+        var resetTransaction = Transaction()
+        resetTransaction.disablesAnimations = true
+        withTransaction(resetTransaction) {
+            animate = false
+        }
+
+        // 2. On the next runloop tick, drive the burst with an explicit animation.
+        //    Using an explicit withAnimation here (instead of relying only on the
+        //    implicit .animation modifier) guarantees the false -> true transition
+        //    is observed and the pieces actually fly outward.
         DispatchQueue.main.async {
-            animate = true
+            withAnimation(.easeOut(duration: 1.4)) {
+                animate = true
+            }
         }
     }
 }

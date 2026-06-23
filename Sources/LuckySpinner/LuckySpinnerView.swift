@@ -89,12 +89,6 @@ public struct LuckySpinnerView: View {
     /// The wheel with the top pointer and confetti overlay.
     private var wheelSection: some View {
         ZStack {
-            // Confetti sits behind the wheel content but in front of the background.
-            if config.showsConfetti {
-                ConfettiView(isActive: showConfetti, colors: config.colors)
-                    .frame(width: config.wheelSize * 1.4, height: config.wheelSize * 1.4)
-            }
-
             SpinnerWheelView(
                 names: names,
                 colors: config.colors,
@@ -108,6 +102,14 @@ public struct LuckySpinnerView: View {
                 Spacer()
             }
             .frame(height: config.wheelSize)
+
+            // Confetti is the top-most layer so it celebrates ON TOP of the wheel
+            // (and the surrounding area) once a name is selected — not hidden behind it.
+            if config.showsConfetti {
+                ConfettiView(isActive: showConfetti, colors: config.colors)
+                    .frame(width: config.wheelSize * 1.4, height: config.wheelSize * 1.4)
+                    .allowsHitTesting(false)
+            }
         }
         .frame(width: config.wheelSize * 1.4, height: config.wheelSize * 1.4)
     }
@@ -121,25 +123,35 @@ public struct LuckySpinnerView: View {
             .offset(y: -4)
     }
 
-    /// Shows the selected name (or a hint before the first spin).
+    /// Shows the selected name (or a hint before the first spin),
+    /// with a confetti burst behind the winning name.
     private var resultSection: some View {
-        VStack(spacing: 4) {
-            if let selectedName {
-                Text(config.selectedText)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(selectedName)
-                    .font(.title.bold())
-                    .foregroundColor(.primary)
-                    .transition(.scale.combined(with: .opacity))
-            } else {
-                Text("Tap \(buttonTitle) to start")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+        ZStack {
+            // Confetti behind the selected name, shown once a winner is revealed.
+            if config.showsConfetti {
+                ConfettiView(isActive: showConfetti, colors: config.colors, count: 24)
+                    .frame(height: 120)
+                    .allowsHitTesting(false)
             }
+
+            VStack(spacing: 4) {
+                if let selectedName {
+                    Text(config.selectedText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(selectedName)
+                        .font(.title.bold())
+                        .foregroundColor(.primary)
+                        .transition(.scale.combined(with: .opacity))
+                } else {
+                    Text("Tap \(buttonTitle) to start")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .animation(.spring(), value: selectedName)
         }
         .frame(minHeight: 60)
-        .animation(.spring(), value: selectedName)
     }
 
     /// The spin button. Disabled while a spin is in progress or no names exist.

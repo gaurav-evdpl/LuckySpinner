@@ -19,16 +19,41 @@ announced with a confetti burst — all with **zero external dependencies**.
 
 Add LuckySpinner using **Swift Package Manager**:
 
+### In Xcode
+
 ```text
 Xcode → File → Add Package Dependencies → paste GitHub package URL
 ```
 
-Or add it directly to your `Package.swift`:
+Paste this URL:
+
+```text
+https://github.com/gaurav-evdpl/LuckySpinner.git
+```
+
+Then choose a dependency rule (e.g. **Up to Next Major Version** `1.0.0`, or **Branch** `main` if no version is tagged yet) and add the **LuckySpinner** library to your app target.
+
+### In Package.swift
+
+Add LuckySpinner to your package's `dependencies`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/your-username/LuckySpinner.git", from: "1.0.0")
+    // Pin to a released version once a tag exists:
+    .package(url: "https://github.com/gaurav-evdpl/LuckySpinner.git", from: "1.0.0")
+
+    // Or, until a version is tagged, track the main branch:
+    // .package(url: "https://github.com/gaurav-evdpl/LuckySpinner.git", branch: "main")
 ]
+```
+
+Then add `"LuckySpinner"` to your target's dependencies:
+
+```swift
+.target(
+    name: "YourApp",
+    dependencies: ["LuckySpinner"]
+)
 ```
 
 ## Usage
