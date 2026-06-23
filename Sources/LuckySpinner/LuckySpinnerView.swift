@@ -56,20 +56,29 @@ public struct LuckySpinnerView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 20) {
-            Text(title)
-                .font(.title2.bold())
-                .multilineTextAlignment(.center)
+        ZStack {
+            VStack(spacing: 20) {
+                Text(title)
+                    .font(.title2.bold())
+                    .multilineTextAlignment(.center)
 
-            if names.isEmpty {
-                emptyState
-            } else {
-                wheelSection
-                resultSection
-                spinButton
+                if names.isEmpty {
+                    emptyState
+                } else {
+                    wheelSection
+                    resultSection
+                    spinButton
+                }
+            }
+            .padding()
+
+            // A single confetti burst that covers the entire view.
+            // Rendered last so it's on top of everything (wheel, pointer, name, button).
+            if config.showsConfetti && showConfetti {
+                ConfettiView(isActive: true, colors: config.colors)
+                    .allowsHitTesting(false)
             }
         }
-        .padding()
     }
 
     // MARK: Sections
@@ -86,7 +95,7 @@ public struct LuckySpinnerView: View {
         .frame(maxWidth: .infinity, minHeight: 200)
     }
 
-    /// The wheel with the top pointer and confetti overlay.
+    /// The wheel with the top pointer.
     private var wheelSection: some View {
         ZStack {
             SpinnerWheelView(
@@ -102,14 +111,6 @@ public struct LuckySpinnerView: View {
                 Spacer()
             }
             .frame(height: config.wheelSize)
-
-            // Confetti is the top-most layer so it celebrates ON TOP of the wheel
-            // (and the surrounding area) once a name is selected — not hidden behind it.
-            if config.showsConfetti {
-                ConfettiView(isActive: showConfetti, colors: config.colors)
-                    .frame(width: config.wheelSize * 1.4, height: config.wheelSize * 1.4)
-                    .allowsHitTesting(false)
-            }
         }
         .frame(width: config.wheelSize * 1.4, height: config.wheelSize * 1.4)
     }
@@ -123,35 +124,25 @@ public struct LuckySpinnerView: View {
             .offset(y: -4)
     }
 
-    /// Shows the selected name (or a hint before the first spin),
-    /// with a confetti burst behind the winning name.
+    /// Shows the selected name (or a hint before the first spin).
     private var resultSection: some View {
-        ZStack {
-            // Confetti behind the selected name, shown once a winner is revealed.
-            if config.showsConfetti {
-                ConfettiView(isActive: showConfetti, colors: config.colors, count: 24)
-                    .frame(height: 120)
-                    .allowsHitTesting(false)
+        VStack(spacing: 4) {
+            if let selectedName {
+                Text(config.selectedText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(selectedName)
+                    .font(.title.bold())
+                    .foregroundColor(.primary)
+                    .transition(.scale.combined(with: .opacity))
+            } else {
+                Text("Tap \(buttonTitle) to start")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
             }
-
-            VStack(spacing: 4) {
-                if let selectedName {
-                    Text(config.selectedText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(selectedName)
-                        .font(.title.bold())
-                        .foregroundColor(.primary)
-                        .transition(.scale.combined(with: .opacity))
-                } else {
-                    Text("Tap \(buttonTitle) to start")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .animation(.spring(), value: selectedName)
         }
         .frame(minHeight: 60)
+        .animation(.spring(), value: selectedName)
     }
 
     /// The spin button. Disabled while a spin is in progress or no names exist.
@@ -200,6 +191,11 @@ public struct LuckySpinnerView: View {
             isSpinning = false
             if config.showsConfetti {
                 showConfetti = true
+                // Remove the confetti view after its burst finishes so the next
+                // spin creates a fresh instance (guarantees onAppear fires again).
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    showConfetti = false
+                }
             }
             onSelection(names[targetIndex])
         }
