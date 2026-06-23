@@ -1,27 +1,29 @@
 import SwiftUI
 
-/// A single piece of confetti with a fixed color, shape, and travel path.
+/// A single piece of confetti with a fixed color, shape, and travel direction.
 private struct ConfettiPiece: Identifiable {
     let id: Int
     let color: Color
     let isCircle: Bool
-    let startX: CGFloat       // horizontal start, as a fraction of width (-0.5...0.5)
-    let endX: CGFloat         // horizontal end, as a fraction of width
-    let endY: CGFloat         // vertical end, as a fraction of height (downward)
+    let angle: Double         // direction to fly, in radians (full 360° spread)
+    let distance: CGFloat     // how far to fly, as a fraction of the view size
+    let drop: CGFloat         // extra downward gravity at the end, as a fraction
     let size: CGFloat
-    let rotation: Double
-    let delay: Double
+    let spin: Double          // total degrees of rotation during the burst
+    let delay: Double         // small stagger so pieces don't move in lockstep
 }
 
 /// A lightweight, dependency-free confetti burst built entirely in SwiftUI.
 ///
-/// The confetti animates outward and downward from the center whenever `isActive`
-/// becomes `true`. It uses only simple shapes and works in SwiftUI previews.
+/// The view shows **nothing** until `isActive` becomes `true`. At that moment the
+/// pieces appear at the center and burst outward in all directions, then fade.
+/// It uses only simple shapes — no third-party libraries.
 ///
 /// This is an internal building block used by ``LuckySpinnerView``.
 struct ConfettiView: View {
 
-    /// When `true`, the confetti plays its burst animation.
+    /// When `true`, the confetti plays its burst animation. While `false`,
+    /// nothing is drawn at all.
     let isActive: Bool
 
     /// The colors to draw the confetti pieces from.
@@ -30,94 +32,109 @@ struct ConfettiView: View {
     /// How many pieces to show.
     var count: Int = 40
 
-    @State private var animate = false
+    /// How long the burst takes to fly out and fade, in seconds.
+    var duration: Double = 1.6
 
-    /// Pre-computed pieces. Positions are derived from the index so the layout is
-    /// stable and reproducible (also keeping previews and tests deterministic).
+    /// Drives the whole burst. `0` = pieces stacked at center (invisible start),
+    /// `1` = pieces fully spread out and faded. A single animated value keeps the
+    /// animation reliable: SwiftUI always interpolates 0 -> 1.
+    @State private var progress: CGFloat = 0
+
+    /// Pre-computed pieces. Directions are spread evenly around a full circle and
+    /// derived from the index, so the layout is stable (and previews/tests stay
+    /// deterministic) while still looking scattered.
     private var pieces: [ConfettiPiece] {
         let palette = colors.isEmpty ? LuckySpinnerTheme.classic : colors
         return (0..<count).map { i in
-            // A simple pseudo-random spread based on the index. No global RNG needed.
-            let a = Double((i * 53) % 100) / 100.0       // 0...1
-            let b = Double((i * 29 + 13) % 100) / 100.0  // 0...1
-            let c = Double((i * 71 + 7) % 100) / 100.0   // 0...1
+            // Spread directions evenly around the circle, with a per-piece jitter.
+            let baseAngle = (Double(i) / Double(count)) * 2 * .pi
+            let jitter = (Double((i * 53) % 100) / 100.0 - 0.5) * 0.5
+            let r = Double((i * 71 + 7) % 100) / 100.0   // 0...1
+            let s = Double((i * 29 + 13) % 100) / 100.0  // 0...1
             return ConfettiPiece(
                 id: i,
                 color: palette[i % palette.count],
                 isCircle: i % 2 == 0,
-                startX: CGFloat(a - 0.5) * 0.2,
-                endX: CGFloat(a - 0.5) * 1.6,
-                endY: CGFloat(0.4 + b * 0.7),
-                size: CGFloat(6 + c * 8),
-                rotation: 180 + c * 540,
-                delay: a * 0.15
+                angle: baseAngle + jitter,
+                distance: CGFloat(0.45 + r * 0.35),   // fly 45–80% of the radius
+                drop: CGFloat(0.10 + s * 0.20),       // a little gravity at the end
+                size: CGFloat(7 + r * 7),             // 7–14 pt
+                spin: 180 + s * 540,
+                delay: r * 0.12
             )
         }
     }
 
     var body: some View {
         GeometryReader { geo in
-            ZStack {
-                ForEach(pieces) { piece in
-                    Group {
-                        if piece.isCircle {
-                            Circle()
-                                .fill(piece.color)
-                                .frame(width: piece.size, height: piece.size)
-                        } else {
-                            Rectangle()
-                                .fill(piece.color)
-                                .frame(width: piece.size, height: piece.size * 0.6)
-                        }
+            // Draw nothing at all until the burst is active.
+            if isActive {
+                ZStack {
+                    ForEach(pieces) { piece in
+                        shape(for: piece)
+                            .frame(width: piece.size, height: piece.size)
+                            .rotationEffect(.degrees(Double(progress) * piece.spin))
+                            .offset(offset(for: piece, in: geo.size))
+                            // Fade in fast, then fade out as the piece reaches the end.
+                            .opacity(opacity(at: progress))
+                            .position(x: geo.size.width / 2, y: geo.size.height / 2)
                     }
-                    .rotationEffect(.degrees(animate ? piece.rotation : 0))
-                    .position(
-                        x: geo.size.width / 2 + piece.startX * geo.size.width,
-                        y: geo.size.height / 2
-                    )
-                    .offset(
-                        x: animate ? piece.endX * geo.size.width : 0,
-                        y: animate ? piece.endY * geo.size.height : 0
-                    )
-                    .opacity(animate ? 0 : 1)
-                    .animation(
-                        animate ? .easeOut(duration: 1.4).delay(piece.delay) : nil,
-                        value: animate
-                    )
                 }
             }
         }
         .allowsHitTesting(false)
-        .onAppear { restartIfNeeded() }
-        .onChange(of: isActive) { _ in restartIfNeeded() }
+        // Start the burst the moment the view becomes active.
+        .onChange(of: isActive) { active in
+            if active { fire() }
+        }
+        // Also handle the case where the view appears already-active.
+        .onAppear {
+            if isActive { fire() }
+        }
     }
 
-    /// Plays the burst from the start whenever it becomes active.
-    private func restartIfNeeded() {
-        guard isActive else {
-            // Snap pieces back to the center, with no animation, ready for next time.
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                animate = false
-            }
-            return
-        }
+    // MARK: Drawing
 
-        // 1. Snap to the start instantly (no animation) so every burst begins fresh.
-        var resetTransaction = Transaction()
-        resetTransaction.disablesAnimations = true
-        withTransaction(resetTransaction) {
-            animate = false
+    @ViewBuilder
+    private func shape(for piece: ConfettiPiece) -> some View {
+        if piece.isCircle {
+            Circle().fill(piece.color)
+        } else {
+            RoundedRectangle(cornerRadius: 1).fill(piece.color)
         }
+    }
 
-        // 2. On the next runloop tick, drive the burst with an explicit animation.
-        //    Using an explicit withAnimation here (instead of relying only on the
-        //    implicit .animation modifier) guarantees the false -> true transition
-        //    is observed and the pieces actually fly outward.
+    /// The current position offset of a piece for the given progress.
+    private func offset(for piece: ConfettiPiece, in size: CGSize) -> CGSize {
+        let reach = min(size.width, size.height) / 2
+        let x = cos(piece.angle) * piece.distance * reach * progress
+        // Vertical travel plus a bit of extra downward "gravity" as it falls.
+        let y = sin(piece.angle) * piece.distance * reach * progress
+              + piece.drop * reach * progress * progress
+        return CGSize(width: x, height: y)
+    }
+
+    /// Pieces pop in instantly, hold, then fade out near the end of the burst.
+    private func opacity(at p: CGFloat) -> Double {
+        if p < 0.05 { return Double(p / 0.05) }   // quick fade-in
+        if p > 0.75 { return Double((1 - p) / 0.25) } // fade-out
+        return 1
+    }
+
+    // MARK: Trigger
+
+    /// Resets to the center, then animates a single 0 -> 1 burst.
+    private func fire() {
+        // Snap back to the start with no animation.
+        var reset = Transaction()
+        reset.disablesAnimations = true
+        withTransaction(reset) {
+            progress = 0
+        }
+        // Animate outward on the next runloop tick so the 0 -> 1 change is observed.
         DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 1.4)) {
-                animate = true
+            withAnimation(.easeOut(duration: duration)) {
+                progress = 1
             }
         }
     }
